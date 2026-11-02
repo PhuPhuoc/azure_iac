@@ -1,0 +1,20 @@
+location            = "southafricanorth"
+resource_group_name = "rg-cms-staging"
+name_prefix         = "cms"
+
+postgres_version               = "16"
+postgres_sku_name              = "B_Standard_B1ms"
+postgres_storage_mb            = 32768
+postgres_backup_retention_days = 7
+postgres_admin_login           = "cmsadmin"
+postgres_database_name         = "cms"
+# Set this to the existing password when migrating an existing server, or use
+# TF_VAR_postgres_admin_password. Null generates a new password.
+# postgres_admin_password = "..."
+
+allowed_client_ips = ["203.0.113.10"]
+# No Container Apps in this environment, so keep the broad rule disabled.
+postgres_allow_azure_services = false
+
+acr_sku_name      = "Basic"
+acr_admin_enabled = true
