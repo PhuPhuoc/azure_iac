@@ -12,7 +12,7 @@ resource "random_string" "suffix" {
 
 locals {
   suffix    = random_string.suffix.result
-  tags      = { project = "phunggela-cms", managed_by = "tf" }
+  tags      = { project = "phungela-cms", managed_by = "tf" }
   acr_repos = { cms = "cms", landing = "landing" }
 }
 
