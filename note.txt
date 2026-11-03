@@ -1,0 +1,294 @@
+# Strapi CMS on Azure Container Apps. All ACA-specific resources and generated
+# Strapi secrets live here; main.tf only owns shared naming, tags and the DSN.
+#
+# The image already exists in ACR (repository "cms", tag from var.cms_image_tag).
+# The app is stateless except for Strapi's local uploads, so it runs with a
+# single replica: two replicas would serve different copies of /app/public/uploads.
+# Enable Azure Blob uploads or an Azure Files volume before raising max_replicas.
+#
+# Cost switch: cms_paused = true sets min_replicas = 0 and disables public
+# ingress. The app resource and its URL stay, but no replica runs and nothing
+# can wake it. cms_min_replicas = 0 alone allows scale-to-zero while public
+# (a request will cold-start it). The ACA environment has no compute charge
+# when no replicas run; ACR Basic and PostgreSQL keep their fixed costs.
+#
+# Container Apps egress IPs are assigned when the app is created and Terraform
+# cannot use them as for_each keys in the same plan. postgres.tf therefore adds
+# the Azure-services firewall rule (0.0.0.0); cms_outbound_ip_addresses is
+# exported for diagnostics. Replacing it with a static allowlist requires a
+# VNet-injected environment behind a NAT gateway.
+
+locals {
+  cms_environment_name = "cae-${local.name_prefix}-${local.suffix}"
+  cms_app_name         = "ca-${local.name_prefix}-${local.suffix}"
+
+  cms_image = format(
+    "%s/%s:%s",
+    azurerm_container_registry.main.login_server,
+    local.acr_repositories.cms,
+    var.cms_image_tag,
+  )
+
+  # Stable public URL: the app FQDN is <name>.<environment default domain>.
+  # Do not derive this from ingress.fqdn, which changes when ingress is paused.
+  cms_url = "https://${local.cms_app_name}.${azurerm_container_app_environment.main.default_domain}"
+
+  # Strapi's env.array("APP_KEYS") splits on commas, so both keys are joined
+  # into one comma-separated secret.
+  strapi_app_keys = join(",", random_password.strapi_app_key[*].result)
+}
+
+# Strapi refuses to boot without these. Generate once and keep them in state:
+# rotating APP_KEYS invalidates sessions, and rotating the other salts breaks
+# existing API tokens / admin JWTs.
+resource "random_password" "strapi_app_key" {
+  count = 2
+
+  length  = 32
+  special = false
+}
+
+resource "random_password" "strapi_api_token_salt" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "strapi_admin_jwt_secret" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "strapi_transfer_token_salt" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "strapi_jwt_secret" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "strapi_preview_secret" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "strapi_encryption_key" {
+  length  = 32
+  special = false
+}
+
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "log-${local.name_prefix}-${local.suffix}"
+  location            = var.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+
+  tags = local.tags
+}
+
+resource "azurerm_container_app_environment" "main" {
+  name                       = local.cms_environment_name
+  location                   = var.location
+  resource_group_name        = data.azurerm_resource_group.main.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  tags = local.tags
+}
+
+resource "azurerm_container_app" "cms" {
+  name                         = local.cms_app_name
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = data.azurerm_resource_group.main.name
+  revision_mode                = "Single"
+
+  tags = local.tags
+
+  # ACR admin credentials are used because the deploying principal is
+  # Contributor on this resource group only and cannot create AcrPull role
+  # assignments. See acr.tf.
+  secret {
+    name  = "acr-password"
+    value = azurerm_container_registry.main.admin_password
+  }
+
+  secret {
+    name  = "database-url"
+    value = local.database_url
+  }
+
+  secret {
+    name  = "app-keys"
+    value = local.strapi_app_keys
+  }
+
+  secret {
+    name  = "api-token-salt"
+    value = random_password.strapi_api_token_salt.result
+  }
+
+  secret {
+    name  = "admin-jwt-secret"
+    value = random_password.strapi_admin_jwt_secret.result
+  }
+
+  secret {
+    name  = "transfer-token-salt"
+    value = random_password.strapi_transfer_token_salt.result
+  }
+
+  secret {
+    name  = "jwt-secret"
+    value = random_password.strapi_jwt_secret.result
+  }
+
+  secret {
+    name  = "preview-secret"
+    value = random_password.strapi_preview_secret.result
+  }
+
+  secret {
+    name  = "encryption-key"
+    value = random_password.strapi_encryption_key.result
+  }
+
+  secret {
+    name  = "stripe-secret-key"
+    value = var.strapi_stripe_secret_key
+  }
+
+  registry {
+    server               = azurerm_container_registry.main.login_server
+    username             = azurerm_container_registry.main.admin_username
+    password_secret_name = "acr-password"
+  }
+
+  template {
+    # Paused overrides the warm-replica setting. max_replicas stays 1 because
+    # local uploads are not shared between replicas.
+    min_replicas                     = var.cms_paused ? 0 : var.cms_min_replicas
+    max_replicas                     = 1
+    termination_grace_period_seconds = 30
+
+    container {
+      name   = "cms"
+      image  = local.cms_image
+      cpu    = 1
+      memory = "2Gi"
+
+      # Strapi reads DATABASE_URL (connection string) and DATABASE_SSL. The DSN
+      # in local.database_url already carries sslmode=require; DATABASE_SSL=true
+      # makes the pg driver build a TLS config instead of relying on the string.
+      env {
+        name  = "DATABASE_CLIENT"
+        value = "postgres"
+      }
+
+      env {
+        name        = "DATABASE_URL"
+        secret_name = "database-url"
+      }
+
+      env {
+        name  = "DATABASE_SSL"
+        value = "true"
+      }
+
+      env {
+        name  = "DATABASE_SSL_REJECT_UNAUTHORIZED"
+        value = "true"
+      }
+
+      env {
+        name  = "CLIENT_URL"
+        value = var.cms_client_url
+      }
+
+      env {
+        name        = "APP_KEYS"
+        secret_name = "app-keys"
+      }
+
+      env {
+        name        = "API_TOKEN_SALT"
+        secret_name = "api-token-salt"
+      }
+
+      env {
+        name        = "ADMIN_JWT_SECRET"
+        secret_name = "admin-jwt-secret"
+      }
+
+      env {
+        name        = "TRANSFER_TOKEN_SALT"
+        secret_name = "transfer-token-salt"
+      }
+
+      env {
+        name        = "JWT_SECRET"
+        secret_name = "jwt-secret"
+      }
+
+      env {
+        name        = "PREVIEW_SECRET"
+        secret_name = "preview-secret"
+      }
+
+      env {
+        name        = "ENCRYPTION_KEY"
+        secret_name = "encryption-key"
+      }
+
+      env {
+        name        = "STRIPE_SECRET_KEY"
+        secret_name = "stripe-secret-key"
+      }
+
+      # Strapi's built-in health endpoint returns 204 once the HTTP server and
+      # database bootstrap are ready. The admin panel build makes the first
+      # boot slow, so the startup probe allows up to ~3 minutes.
+      startup_probe {
+        transport               = "HTTP"
+        port                    = 1337
+        path                    = "/_health"
+        interval_seconds        = 10
+        timeout                 = 5
+        failure_count_threshold = 18
+        initial_delay           = 10
+      }
+
+      readiness_probe {
+        transport               = "HTTP"
+        port                    = 1337
+        path                    = "/_health"
+        interval_seconds        = 10
+        timeout                 = 5
+        failure_count_threshold = 3
+      }
+
+      liveness_probe {
+        transport               = "HTTP"
+        port                    = 1337
+        path                    = "/_health"
+        interval_seconds        = 30
+        timeout                 = 5
+        failure_count_threshold = 3
+        initial_delay           = 60
+      }
+    }
+  }
+
+  ingress {
+    # Paused removes public ingress so nothing can wake the zero-replica app.
+    external_enabled           = !var.cms_paused
+    target_port                = 1337
+    transport                  = "auto"
+    allow_insecure_connections = false
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+}

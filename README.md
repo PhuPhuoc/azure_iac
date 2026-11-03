@@ -1,6 +1,7 @@
 # infra
 
-Terraform for Azure Container Registry and PostgreSQL Flexible Server.
+Terraform for Azure Container Registry, PostgreSQL Flexible Server and the
+Azure Container Apps environment.
 
 ## Layout
 
@@ -8,7 +9,8 @@ Terraform for Azure Container Registry and PostgreSQL Flexible Server.
 infra/
 ├── modules/
 │   ├── postgres/
-│   └── acr/
+│   ├── acr/
+│   └── aca/
 ├── environments/
 │   ├── dev/
 │   ├── staging/
@@ -16,8 +18,13 @@ infra/
 └── .gitignore
 ```
 
-Each environment is a root module that calls `modules/postgres` and
-`modules/acr` with its own variables.
+Each environment is a root module that calls `modules/postgres`, `modules/acr`
+and `modules/aca` with its own variables.
+
+`modules/aca` owns one Container App Environment per environment plus the Log
+Analytics workspace its logs go to. It creates no apps: each app gets its own
+module (`aca_<app>`) that takes `module.aca.environment_id` and builds its URL
+as `https://<app-name>.<module.aca.default_domain>`.
 
 ## State
 
@@ -37,6 +44,40 @@ export ARM_ACCESS_KEY="$(az storage account keys list \
 ```
 
 Do not commit that key.
+
+## Networking
+
+Container Apps and PostgreSQL are public; there is no VNet.
+
+- `modules/aca` creates an external environment with no
+  `infrastructure_subnet_id`. Container Apps egress IPs are assigned per app
+  and are not known to Terraform when the PostgreSQL firewall rules are
+  computed, so set `postgres_allow_azure_services = true` in an environment
+  before creating its first app. The `0.0.0.0` rule plus the `sslmode=require`
+  in `database_url` is the documented workaround.
+- The environment declares the `Consumption` workload profile. An environment
+  created without a workload profile can never gain one (it must be
+  recreated), and only a workload profile environment can use a `/27` subnet
+  in a VNet; consumption-only requires `/23`.
+
+Upgrade path when a static egress IP or a non-public database is required:
+
+1. Add `environments/<env>/vnet.tf`: a subnet of at least `/27` delegated to
+   `Microsoft.App/environments`, a Standard NAT gateway with a static public
+   IP, and a `/28` subnet for private endpoints. Make it a module only when a
+   second environment needs it.
+2. Pass that subnet to `modules/aca` as `infrastructure_subnet_id`. This
+   replaces the environment, and with it every container app, and changes
+   `default_domain`. Attach a custom domain to the apps first if the public URL
+   must survive.
+3. Keep PostgreSQL in public access mode and add a private endpoint on
+   `privatelink.postgres.database.azure.com`, then disable public network
+   access. Do not move the server to VNet integration: private endpoints are
+   not supported on VNet-integrated servers.
+
+NAT gateway plus its public IP cost about \$36/month per environment in
+`southafricanorth`, before the public IPs and load balancer that a
+VNet-injected environment also bills.
 
 ## Usage
 

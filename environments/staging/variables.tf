@@ -90,7 +90,7 @@ variable "allowed_client_ips" {
 }
 
 variable "postgres_allow_azure_services" {
-  description = "Enable the 0.0.0.0 firewall rule for Azure services. Not needed without Container Apps."
+  description = "Enable the 0.0.0.0 firewall rule for Azure services. Required once a Container App in this environment connects to PostgreSQL."
   type        = bool
   default     = false
 }

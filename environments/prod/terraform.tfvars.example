@@ -13,7 +13,8 @@ postgres_database_name         = "cms"
 # postgres_admin_password = "..."
 
 allowed_client_ips = ["203.0.113.10"]
-# No Container Apps in this environment, so keep the broad rule disabled.
+# Container Apps egress has no static IP, so the first app in this environment
+# needs this rule. Keep it disabled until then.
 postgres_allow_azure_services = false
 
 acr_sku_name      = "Basic"

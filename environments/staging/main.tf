@@ -47,3 +47,13 @@ module "acr" {
   public_network_access_enabled = true
   tags                          = local.tags
 }
+
+module "aca" {
+  source = "../../modules/aca"
+
+  name_prefix         = var.name_prefix
+  suffix              = local.suffix
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = var.location
+  tags                = local.tags
+}

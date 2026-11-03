@@ -50,3 +50,23 @@ output "acr_admin_password" {
   value       = module.acr.admin_password
   sensitive   = true
 }
+
+output "aca_environment_id" {
+  description = "Container App Environment resource ID for container_app_environment_id."
+  value       = module.aca.environment_id
+}
+
+output "aca_environment_name" {
+  description = "Container App Environment name."
+  value       = module.aca.environment_name
+}
+
+output "aca_default_domain" {
+  description = "Environment default domain. App URLs are https://<app-name>.<default_domain>."
+  value       = module.aca.default_domain
+}
+
+output "aca_log_analytics_workspace_id" {
+  description = "Log Analytics workspace that receives Container Apps logs."
+  value       = module.aca.log_analytics_workspace_id
+}
