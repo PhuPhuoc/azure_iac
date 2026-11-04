@@ -106,3 +106,44 @@ output "headless_cms_preview_secret" {
   value       = module.headless_cms.preview_secret
   sensitive   = true
 }
+
+output "landing_name" {
+  description = "Container App name for az containerapp commands."
+  value       = module.landing.name
+}
+
+output "landing_url" {
+  description = "Public landing page URL."
+  value       = module.landing.url
+}
+
+output "landing_fqdn" {
+  description = "FQDN currently assigned to landing ingress."
+  value       = module.landing.fqdn
+}
+
+output "landing_image" {
+  description = "Image reference deployed to the landing page."
+  value       = module.landing.image
+}
+
+output "blob_storage_account_name" {
+  description = "Storage account that holds CMS uploads."
+  value       = module.blob.storage_account_name
+}
+
+output "blob_container_name" {
+  description = "AZURE_STORAGE_CONTAINER_NAME for local upload testing."
+  value       = module.blob.container_name
+}
+
+output "blob_cdn_url" {
+  description = "AZURE_STORAGE_CDN_URL for local upload testing. Blob endpoint until a CDN exists."
+  value       = module.blob.container_url
+}
+
+output "blob_sas_url" {
+  description = "AZURE_STORAGE_SAS_URL for local upload testing."
+  value       = module.blob.sas_url
+  sensitive   = true
+}

@@ -122,6 +122,12 @@ variable "cms_image_tag" {
   default     = "latest"
 }
 
+variable "landing_image_tag" {
+  description = "Landing page image tag deployed from ACR. Pin a release tag for prod; latest follows the last push."
+  type        = string
+  default     = "latest"
+}
+
 variable "cms_paused" {
   description = "Scale the CMS to zero and disable its ingress. Registry and database stay untouched."
   type        = bool

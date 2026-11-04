@@ -32,6 +32,12 @@ variable "cms_image_repository" {
   default     = "cms"
 }
 
+variable "workload_profile_name" {
+  description = "Workload profile used by the app. Consumption is the default profile of a Consumption-only environment."
+  type        = string
+  default     = "Consumption"
+}
+
 variable "container_app_environment_id" {
   description = "Container App Environment resource ID."
   type        = string

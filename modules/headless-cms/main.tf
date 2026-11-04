@@ -63,7 +63,10 @@ resource "azurerm_container_app" "headless_cms" {
   name                         = local.cms_app_name
   container_app_environment_id = var.container_app_environment_id
   resource_group_name          = var.resource_group_name
-  revision_mode                = "Single"
+  # Set explicitly: the API always reports the profile back, so leaving it
+  # unset makes every plan show a removal from state.
+  workload_profile_name = var.workload_profile_name
+  revision_mode         = "Single"
 
   tags = var.tags
 

@@ -84,3 +84,36 @@ module "headless_cms" {
   client_url               = var.cms_client_url
   strapi_stripe_secret_key = var.strapi_stripe_secret_key
 }
+
+# Public landing page. PREVIEW_SECRET is the CMS-generated value, so the
+# draft-mode redirect stays in sync without a second source of truth.
+module "landing" {
+  source = "../../modules/landing"
+
+  name_prefix         = var.name_prefix
+  suffix              = local.suffix
+  resource_group_name = data.azurerm_resource_group.main.name
+  tags                = local.tags
+
+  container_app_environment_id   = module.aca.environment_id
+  app_environment_default_domain = module.aca.default_domain
+
+  acr_login_server         = module.acr.login_server
+  acr_admin_username       = module.acr.admin_username
+  acr_admin_password       = module.acr.admin_password
+  landing_image_repository = local.acr_repos.landing
+  landing_image_tag        = var.landing_image_tag
+
+  preview_secret = module.headless_cms.preview_secret
+}
+
+# Media storage for local upload testing. Not wired into module.headless_cms.
+module "blob" {
+  source = "../../modules/blob"
+
+  name_prefix         = var.name_prefix
+  suffix              = local.suffix
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = var.location
+  tags                = local.tags
+}
