@@ -10,7 +10,8 @@ infra/
 ├── modules/
 │   ├── postgres/
 │   ├── acr/
-│   └── aca/
+│   ├── aca/
+│   └── headless-cms/
 ├── environments/
 │   ├── dev/
 │   ├── staging/
@@ -18,13 +19,23 @@ infra/
 └── .gitignore
 ```
 
-Each environment is a root module that calls `modules/postgres`, `modules/acr`
-and `modules/aca` with its own variables.
+Each environment is a root module that calls `modules/postgres`, `modules/acr`,
+`modules/aca` and `modules/headless-cms` with its own variables.
 
 `modules/aca` owns one Container App Environment per environment plus the Log
 Analytics workspace its logs go to. It creates no apps: each app gets its own
 module (`aca_<app>`) that takes `module.aca.environment_id` and builds its URL
 as `https://<app-name>.<module.aca.default_domain>`.
+
+`modules/headless-cms` owns the Strapi Container App: image reference from ACR,
+database wiring from `module.postgres`, and the Strapi boot secrets it
+generates itself (APP_KEYS, API_TOKEN_SALT, ADMIN_JWT_SECRET,
+TRANSFER_TOKEN_SALT, JWT_SECRET, ENCRYPTION_KEY, PREVIEW_SECRET). It never
+creates a database or registry. Outputs: `url`, `fqdn`, `image`,
+`latest_revision_name`, `latest_revision_fqdn`, `outbound_ip_addresses`, and
+the sensitive `preview_secret` the frontend must reuse. `strapi_stripe_secret_key`
+and `client_url` are omitted from the app when null instead of being set to an
+empty string.
 
 ## State
 

@@ -113,3 +113,35 @@ variable "acr_admin_enabled" {
   type        = bool
   default     = true
 }
+
+# Headless CMS (Container App)
+
+variable "cms_image_tag" {
+  description = "CMS image tag deployed from ACR. Pin a release tag for prod; latest follows the last push."
+  type        = string
+  default     = "latest"
+}
+
+variable "cms_paused" {
+  description = "Scale the CMS to zero and disable its ingress. Registry and database stay untouched."
+  type        = bool
+  default     = false
+}
+
+variable "cms_client_url" {
+  description = "Public frontend URL used for admin preview origins and password-reset links. Null omits CLIENT_URL."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cms_client_url == null || can(regex("^https?://", var.cms_client_url))
+    error_message = "cms_client_url must start with http:// or https://."
+  }
+}
+
+variable "strapi_stripe_secret_key" {
+  description = "Stripe secret key read by the order controller at boot. Prefer TF_VAR_strapi_stripe_secret_key; null omits the key."
+  type        = string
+  sensitive   = true
+  default     = null
+}

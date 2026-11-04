@@ -13,9 +13,17 @@ postgres_database_name         = "cms"
 # postgres_admin_password = "..."
 
 allowed_client_ips = ["203.0.113.10"]
-# Container Apps egress has no static IP, so the first app in this environment
-# needs this rule. Keep it disabled until then.
-postgres_allow_azure_services = false
+# Container App egress has no static IP, so the CMS needs the Azure services rule.
+postgres_allow_azure_services = true
 
 acr_sku_name      = "Basic"
 acr_admin_enabled = true
+
+# Headless CMS
+# Pin a release tag, not latest, so a rollback is just an older tag.
+cms_image_tag = "latest"
+cms_paused    = false
+# Public frontend URL for admin preview origins and password-reset links.
+# cms_client_url = "https://www.example.com"
+# Prefer TF_VAR_strapi_stripe_secret_key over checking a key into tfvars.
+# strapi_stripe_secret_key = "sk_live_..."

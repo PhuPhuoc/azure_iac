@@ -57,3 +57,30 @@ module "aca" {
   location            = var.location
   tags                = local.tags
 }
+
+module "headless_cms" {
+  source = "../../modules/headless-cms"
+
+  name_prefix         = var.name_prefix
+  suffix              = local.suffix
+  resource_group_name = data.azurerm_resource_group.main.name
+  tags                = local.tags
+
+  container_app_environment_id   = module.aca.environment_id
+  app_environment_default_domain = module.aca.default_domain
+
+  acr_login_server     = module.acr.login_server
+  acr_admin_username   = module.acr.admin_username
+  acr_admin_password   = module.acr.admin_password
+  cms_image_repository = local.acr_repos.cms
+  cms_image_tag        = var.cms_image_tag
+  cms_paused           = var.cms_paused
+
+  database_host     = module.postgres.fqdn
+  database_name     = module.postgres.database_name
+  database_username = module.postgres.admin_login
+  database_password = module.postgres.admin_password
+
+  client_url               = var.cms_client_url
+  strapi_stripe_secret_key = var.strapi_stripe_secret_key
+}

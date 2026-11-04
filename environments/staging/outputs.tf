@@ -70,3 +70,39 @@ output "aca_log_analytics_workspace_id" {
   description = "Log Analytics workspace that receives Container Apps logs."
   value       = module.aca.log_analytics_workspace_id
 }
+
+output "headless_cms_name" {
+  description = "Container App name for az containerapp commands."
+  value       = module.headless_cms.name
+}
+
+output "headless_cms_url" {
+  description = "Public CMS URL. Unreachable while cms_paused is true."
+  value       = module.headless_cms.url
+}
+
+output "headless_cms_fqdn" {
+  description = "FQDN currently assigned to CMS ingress."
+  value       = module.headless_cms.fqdn
+}
+
+output "headless_cms_image" {
+  description = "Image reference deployed to the CMS."
+  value       = module.headless_cms.image
+}
+
+output "headless_cms_outbound_ip_addresses" {
+  description = "CMS egress IPs for the current revision. Diagnostics only."
+  value       = module.headless_cms.outbound_ip_addresses
+}
+
+output "headless_cms_latest_revision_name" {
+  description = "Latest CMS revision name."
+  value       = module.headless_cms.latest_revision_name
+}
+
+output "headless_cms_preview_secret" {
+  description = "Shared PREVIEW_SECRET for the frontend draft-mode route."
+  value       = module.headless_cms.preview_secret
+  sensitive   = true
+}
