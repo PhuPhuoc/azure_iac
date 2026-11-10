@@ -138,6 +138,21 @@ resource "azurerm_container_app" "headless_cms" {
     value = random_password.strapi_encryption_key.result
   }
 
+  secret {
+    name  = "blob-sas-url"
+    value = var.blob_sas_url
+  }
+
+  secret {
+    name  = "blob-container-name"
+    value = var.blob_container_name
+  }
+
+  secret {
+    name  = "blob-cdn-url"
+    value = var.blob_cdn_url
+  }
+
   dynamic "secret" {
     for_each = local.has_stripe_key ? [1] : []
 
@@ -243,6 +258,22 @@ resource "azurerm_container_app" "headless_cms" {
         name        = "ENCRYPTION_KEY"
         secret_name = "encryption-key"
       }
+
+      env {
+        name        = "AZURE_STORAGE_SAS_URL"
+        secret_name = "blob-sas-url"
+      }
+
+      env {
+        name        = "AZURE_STORAGE_CONTAINER_NAME"
+        secret_name = "blob-container-name"
+      }
+
+      env {
+        name        = "AZURE_STORAGE_CDN_URL"
+        secret_name = "blob-cdn-url"
+      }
+
 
       # Strapi loads this at boot (src/api/order/controllers/order.ts), so an
       # empty value must be omitted rather than set to "".

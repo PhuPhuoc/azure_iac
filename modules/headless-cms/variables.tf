@@ -101,6 +101,25 @@ variable "database_password" {
   sensitive   = true
 }
 
+# Blob storage
+variable "blob_sas_url" {
+  description = "SAS URL to a blob storage container. Used for Strapi media uploads."
+  type        = string
+  sensitive   = true
+}
+
+variable "blob_container_name" {
+  description = "Name of the blob storage container. Used for Strapi media uploads."
+  type        = string
+  default     = "uploads"
+}
+
+variable "blob_cdn_url" {
+  description = "CDN URL for the blob storage container. Used for Strapi media uploads."
+  type        = string
+  default     = "uploads"
+}
+
 # Application
 
 variable "client_url" {
