@@ -13,11 +13,16 @@ output "postgres_admin_login" {
   value       = module.postgres.admin_login
 }
 
-output "postgres_admin_password" {
-  description = "Effective PostgreSQL administrator password."
-  value       = module.postgres.admin_password
-  sensitive   = true
+output "db_password" {
+  value     = module.postgres.admin_password
+  sensitive = true
 }
+
+# output "postgres_admin_password" {
+#   description = "Effective PostgreSQL administrator password."
+#   value       = module.postgres.admin_password
+#   sensitive   = true
+# }
 
 output "database_url" {
   description = "Full DSN for migrations and apps."
@@ -92,39 +97,89 @@ output "aca_log_analytics_workspace_id" {
   value       = module.aca.log_analytics_workspace_id
 }
 
+output "vnet_name" {
+  description = "Virtual network that holds every private endpoint target."
+  value       = module.vnet.vnet_name
+}
+
+output "vnet_id" {
+  description = "Virtual network ID, for peering or DNS work later."
+  value       = module.vnet.vnet_id
+}
+
+output "aca_subnet_id" {
+  description = "Subnet joined by the Container Apps environment."
+  value       = module.vnet.aca_subnet_id
+}
+
+output "postgres_subnet_id" {
+  description = "Delegated subnet used by PostgreSQL VNet integration."
+  value       = module.vnet.postgres_subnet_id
+}
+
+output "bastion_subnet_id" {
+  description = "Subnet that holds the bastion VM."
+  value       = module.vnet.bastion_subnet_id
+}
+
+output "postgres_private_dns_zone" {
+  description = "Private DNS zone the server's hostname resolves from inside the VNet."
+  value       = module.vnet.postgres_dns_zone_name
+}
+
+output "aca_egress_ip" {
+  description = "Static IP Container Apps uses for outbound traffic."
+  value       = module.vnet.nat_public_ip
+}
+
+output "bastion_public_ip" {
+  description = "Public address of the bastion VM. Null when enable_bastion_vm is false."
+  value       = one(module.bastion[*].public_ip_address)
+}
+
+output "bastion_ssh_command" {
+  description = "SSH command for the bastion VM. Null when enable_bastion_vm is false."
+  value       = one(module.bastion[*].ssh_command)
+}
+
+output "bastion_pgweb_tunnel_command" {
+  description = "SSH tunnel to pgweb on the bastion, then open http://127.0.0.1:8081. Null when enable_bastion_vm is false."
+  value       = one(module.bastion[*].pgweb_tunnel_command)
+}
+
 # output "headless_cms_name" {
 #   description = "Container App name for az containerapp commands."
-#   value       = module.headless_cms.name
+#   value       = module.cms.name
 # }
 #
 # output "headless_cms_url" {
 #   description = "Public CMS URL. Unreachable while cms_paused is true."
-#   value       = module.headless_cms.url
+#   value       = module.cms.url
 # }
 #
 # output "headless_cms_fqdn" {
 #   description = "FQDN currently assigned to CMS ingress."
-#   value       = module.headless_cms.fqdn
+#   value       = module.cms.fqdn
 # }
 #
 # output "headless_cms_image" {
 #   description = "Image reference deployed to the CMS."
-#   value       = module.headless_cms.image
+#   value       = module.cms.image
 # }
 #
 # output "headless_cms_outbound_ip_addresses" {
 #   description = "CMS egress IPs for the current revision. Diagnostics only."
-#   value       = module.headless_cms.outbound_ip_addresses
+#   value       = module.cms.outbound_ip_addresses
 # }
 #
 # output "headless_cms_latest_revision_name" {
 #   description = "Latest CMS revision name."
-#   value       = module.headless_cms.latest_revision_name
+#   value       = module.cms.latest_revision_name
 # }
 #
 # output "headless_cms_preview_secret" {
 #   description = "Shared PREVIEW_SECRET for the frontend draft-mode route."
-#   value       = module.headless_cms.preview_secret
+#   value       = module.cms.preview_secret
 #   sensitive   = true
 # }
 #

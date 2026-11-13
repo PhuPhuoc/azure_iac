@@ -18,6 +18,7 @@ resource "azurerm_container_app_environment" "main" {
   resource_group_name        = var.resource_group_name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   logs_destination           = "log-analytics"
+  infrastructure_subnet_id   = var.infrastructure_subnet_id
 
   # An environment created without a workload profile can never gain one, and
   # only a workload profile environment can use a /27 subnet when it is moved

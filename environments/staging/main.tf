@@ -58,8 +58,8 @@ module "aca" {
   tags                = local.tags
 }
 
-module "headless_cms" {
-  source = "../../modules/headless-cms"
+module "cms" {
+  source = "../../modules/cms"
 
   name_prefix         = var.name_prefix
   suffix              = local.suffix
@@ -83,6 +83,10 @@ module "headless_cms" {
 
   client_url               = var.cms_client_url
   strapi_stripe_secret_key = var.strapi_stripe_secret_key
+
+  blob_sas_url        = module.blob.sas_url
+  blob_container_name = module.blob.container_name
+  blob_cdn_url        = module.blob.container_url
 }
 
 # Public landing page. PREVIEW_SECRET is the CMS-generated value, so the
@@ -104,10 +108,11 @@ module "landing" {
   landing_image_repository = local.acr_repos.landing
   landing_image_tag        = var.landing_image_tag
 
-  preview_secret = module.headless_cms.preview_secret
+  preview_secret = module.cms.preview_secret
 }
 
-# Media storage for local upload testing. Not wired into module.headless_cms.
+# Media storage. Its SAS/URL feed the CMS upload plugin; outputs also stay
+# exposed for local Strapi testing against the same account.
 module "blob" {
   source = "../../modules/blob"
 

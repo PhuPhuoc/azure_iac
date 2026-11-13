@@ -79,7 +79,7 @@ variable "postgres_database_name" {
 }
 
 variable "allowed_client_ips" {
-  description = "IPv4 addresses allowed to reach PostgreSQL (workstation IPs that run migrations)."
+  description = "IPv4 workstation addresses allowed to SSH to the bastion VM."
   type        = list(string)
   default     = []
 
@@ -89,10 +89,44 @@ variable "allowed_client_ips" {
   }
 }
 
-variable "postgres_allow_azure_services" {
-  description = "Enable the 0.0.0.0 firewall rule for Azure services. Required once a Container App in this environment connects to PostgreSQL."
+# Bastion
+variable "enable_bastion_vm" {
+  description = "Create the bastion VM used to reach the private PostgreSQL server."
   type        = bool
   default     = false
+}
+
+variable "bastion_vm_size" {
+  description = "Azure VM size for the bastion."
+  # SouthAfricaNorth KHÔNG có B-series v1 (B1s/B1ms/B2s không nằm trong
+  # `az vm list-skus -l southafricanorth`, 2026-11-13). B2s_v2 tồn tại nhưng
+  # quota sub cho standardBsv2Family = 0 và quyền xin increase cần Owner
+  # (AuthorizationFailed 2026-11-13) ⇒ D2_v2: size rẻ nhất có quota sẵn
+  # (standardDSv2Family = 10), đủ cho usage on-demand bật-tắt theo phiên
+  # migration. Đổi lại B2s_v2 ($0.109/h vs $0.153/h) khi quota Bsv2 được duyệt.
+  type    = string
+  default = "Standard_D2_v2"
+}
+
+variable "bastion_admin_username" {
+  description = "Admin username for the bastion VM."
+  type        = string
+  default     = "azureuser"
+}
+
+variable "bastion_ssh_public_key" {
+  description = "OpenSSH public key for the bastion VM. Required when enable_bastion_vm is true; pass via TF_VAR_bastion_ssh_public_key."
+  type        = string
+  default     = ""
+  nullable    = false
+
+  # non-empty KHÔNG check được ở đây vì phụ thuộc enable_bastion_vm (validation không
+  # cross-reference biến khác) → modules/bastion/ssh_public_key từ chối rỗng, và
+  # validation đó chỉ chạy khi count = 1, tức là khi bastion được bật.
+  validation {
+    condition     = var.bastion_ssh_public_key == "" || can(regex("^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) ", var.bastion_ssh_public_key))
+    error_message = "bastion_ssh_public_key must be an OpenSSH public key (ssh-rsa, ssh-ed25519, or ecdsa-sha2-*)."
+  }
 }
 
 # ACR

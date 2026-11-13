@@ -115,9 +115,8 @@ variable "blob_container_name" {
 }
 
 variable "blob_cdn_url" {
-  description = "CDN URL for the blob storage container. Used for Strapi media uploads."
+  description = "Public base URL served to end users for files in the container (blob container URL until a CDN exists)."
   type        = string
-  default     = "uploads"
 }
 
 # Application

@@ -18,6 +18,12 @@ variable "location" {
   type        = string
 }
 
+variable "infrastructure_subnet_id" {
+  description = "Subnet ID to join the environment to a VNet. Null keeps the managed VNet."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags applied to the registry."
   type        = map(string)

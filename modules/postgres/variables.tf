@@ -78,6 +78,24 @@ variable "allow_azure_services" {
   default     = false
 }
 
+variable "delegated_subnet_id" {
+  description = "Subnet ID for VNet integration. Null keeps public access."
+  type        = string
+  default     = null
+}
+
+variable "private_dns_zone_id" {
+  description = "Private DNS zone ID required when delegated_subnet_id is set."
+  type        = string
+  default     = null
+}
+
+variable "public_network_access_enabled" {
+  description = "Whether the server has a public endpoint. Must be false with delegated_subnet_id."
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Tags applied to the server."
   type        = map(string)

@@ -11,9 +11,11 @@ infra/
 │   ├── postgres/
 │   ├── acr/
 │   ├── aca/
-│   ├── headless-cms/
+│   ├── cms/
 │   ├── landing/
-│   └── blob/
+│   ├── blob/
+│   ├── vnet/
+│   └── bastion/
 ├── environments/
 │   ├── dev/
 │   ├── staging/
@@ -22,15 +24,16 @@ infra/
 ```
 
 Each environment is a root module that calls `modules/postgres`, `modules/acr`,
-`modules/aca`, `modules/headless-cms`, `modules/landing` and `modules/blob` with
-its own variables.
+`modules/aca`, `modules/cms`, `modules/landing` and `modules/blob` with its own
+variables. `prod` additionally calls `modules/vnet` and, with
+`enable_bastion_vm = true`, `modules/bastion`.
 
 `modules/aca` owns one Container App Environment per environment plus the Log
 Analytics workspace its logs go to. It creates no apps: each app gets its own
 module (`aca_<app>`) that takes `module.aca.environment_id` and builds its URL
 as `https://<app-name>.<module.aca.default_domain>`.
 
-`modules/headless-cms` owns the Strapi Container App: image reference from ACR,
+`modules/cms` owns the Strapi Container App: image reference from ACR,
 database wiring from `module.postgres`, and the Strapi boot secrets it
 generates itself (APP_KEYS, API_TOKEN_SALT, ADMIN_JWT_SECRET,
 TRANSFER_TOKEN_SALT, JWT_SECRET, ENCRYPTION_KEY, PREVIEW_SECRET). It never
@@ -43,7 +46,7 @@ empty string.
 `modules/landing` owns the Next.js Container App (`ca-<prefix>-landing-<suffix>`)
 on the same environment, port 3000, 0.5 CPU / 1Gi, max one replica. Its only
 required input is `PREVIEW_SECRET`, passed in from
-`module.headless_cms.preview_secret` — never generated again, because
+`module.cms.preview_secret` — never generated again, because
 `next/app/api/preview` compares it with the CMS-signed `secret` parameter and
 answers 401 on mismatch. The image optimizer allowlist is baked by
 `next.config.mjs` during `next build` (`--build-arg IMAGE_HOSTNAME=<cms-host>`,
@@ -59,8 +62,8 @@ used instead. Outputs: `url`, `fqdn`, `image`, `latest_revision_name`,
 `latest_revision_fqdn`, `outbound_ip_addresses`.
 
 `modules/blob` owns a StorageV2 account plus one container for Strapi uploads.
-It is not wired into `modules/headless-cms`: its outputs exist so a local Strapi
-can upload against real Azure storage before the app gets the credentials.
+Its SAS and container URL are wired into `modules/cms` (`AZURE_STORAGE_*`); the
+outputs also let a local Strapi upload against real Azure storage.
 
 | Environment output | Local `strapi/.env` |
 | --- | --- |
@@ -96,37 +99,139 @@ Do not commit that key.
 
 ## Networking
 
-Container Apps and PostgreSQL are public; there is no VNet.
+`dev` and `staging`: Container Apps and PostgreSQL are public; there is no
+VNet. `prod`: one VNet (`vnet-<prefix>-prod01`, 10.60.0.0/16) holds the
+Container Apps subnet, the PostgreSQL delegated subnet and the bastion subnet;
+PostgreSQL has `public_network_access_enabled = false` and no firewall rules,
+so it is reachable only from inside that VNet, resolved by the private DNS zone
+`<prefix>-prod01.postgres.database.azure.com`.
 
-- `modules/aca` creates an external environment with no
-  `infrastructure_subnet_id`. Container Apps egress IPs are assigned per app
-  and are not known to Terraform when the PostgreSQL firewall rules are
-  computed, so set `postgres_allow_azure_services = true` in an environment
-  before creating its first app. The `0.0.0.0` rule plus the `sslmode=require`
-  in `database_url` is the documented workaround.
+- `dev` and `staging` leave `infrastructure_subnet_id` null, so Container Apps
+  assigns egress IPs per app and they are not known to Terraform when the
+  PostgreSQL firewall rules are computed: set `postgres_allow_azure_services =
+  true` there before creating the first app. The `0.0.0.0` rule plus the
+  `sslmode=require` in `database_url` is the documented workaround.
+- `prod` passes the Container Apps subnet and egresses through the NAT
+  gateway, so `aca_egress_ip` is a single allow-listable address. Firewall
+  rules stay empty: the server has no public endpoint to guard.
 - The environment declares the `Consumption` workload profile. An environment
   created without a workload profile can never gain one (it must be
   recreated), and only a workload profile environment can use a `/27` subnet
   in a VNet; consumption-only requires `/23`.
-
-Upgrade path when a static egress IP or a non-public database is required:
-
-1. Add `environments/<env>/vnet.tf`: a subnet of at least `/27` delegated to
-   `Microsoft.App/environments`, a Standard NAT gateway with a static public
-   IP, and a `/28` subnet for private endpoints. Make it a module only when a
-   second environment needs it.
-2. Pass that subnet to `modules/aca` as `infrastructure_subnet_id`. This
-   replaces the environment, and with it every container app, and changes
-   `default_domain`. Attach a custom domain to the apps first if the public URL
-   must survive.
-3. Keep PostgreSQL in public access mode and add a private endpoint on
-   `privatelink.postgres.database.azure.com`, then disable public network
-   access. Do not move the server to VNet integration: private endpoints are
-   not supported on VNet-integrated servers.
+- A VNet-integrated server cannot also carry private endpoints, so `prod` uses
+  the delegated subnet instead of a private endpoint on
+  `privatelink.postgres.database.azure.com`.
 
 NAT gateway plus its public IP cost about \$36/month per environment in
-`southafricanorth`, before the public IPs and load balancer that a
-VNet-injected environment also bills.
+`southafricanorth`, and a VNet-injected environment also bills the
+platform-created `ME_*` resource group: one Standard load balancer and two
+static public IPs.
+
+## Bastion (prod)
+
+`enable_bastion_vm = true` adds a Ubuntu 24.04 VM in `snet-bastion-prod01`
+(`vm-bastion-<prefix>-prod01`). It is the only way into the private PostgreSQL
+server, so it carries:
+
+| Tool | Purpose |
+| --- | --- |
+| `psql`, `pg_dump`, `pg_restore` (`postgresql-client` 16) | terminal queries, dump/restore |
+| Node.js 22 + npm, from NodeSource | Strapi/Node scripts against the DB |
+| `pgweb` 0.17.0 | browser explorer: schema tree, SQL editor, CSV/JSON export |
+
+No GUI runs on the VM: `pgweb` is a web server and the page is rendered by your
+own browser through the tunnel. It stores no credentials and accepts
+`database_url` (`sslmode=require` is handled by `lib/pq`).
+
+`pgweb` runs as the `pgweb` systemd unit on `127.0.0.1:8081`. The NSG still
+opens only port 22, and the web UI is reached through a tunnel:
+
+```bash
+terraform output -raw bastion_ssh_command
+terraform output -raw bastion_pgweb_tunnel_command   # keep it running
+# then open http://127.0.0.1:8081 and paste the DSN from
+terraform output -raw database_url                   # postgres://…?sslmode=require
+```
+
+Put the forward in `~/.ssh/config` to skip the second command:
+
+```sshconfig
+Host bastion-prod
+  HostName <bastion-public-ip>
+  User azureuser
+  LocalForward 8081 127.0.0.1:8081
+  ServerAliveInterval 30
+```
+
+Then `ssh bastion-prod` both logs in and forwards; `http://127.0.0.1:8081`
+works while the session lives.
+
+In the pgweb connect form, either paste `database_url`, or fill it manually:
+host `bcc2cad2cdfe.<prefix>-prod01.postgres.database.azure.com` (the `pg-…`
+name works too, it is a CNAME inside the VNet), port `5432`, user `cmsadmin`,
+password from `terraform output -raw db_password`, database `cms`, SSL mode
+`require`. pgweb resolves that name from the VM — your laptop never has to.
+
+The port stays closed on purpose: pgweb has no TLS (bind+auth only, plain
+HTTP) and is writable by default (`--readonly` is opt-in), so a public 8081
+would be an unauthenticated SQL console on the internet. Only 22 is open, from
+`allowed_client_ips`.
+
+The `database_url` host is the public name; it resolves to the server's private
+address only from inside the VNet, which is why the tunnel exists. Same for
+`psql`:
+
+```bash
+terraform output -raw postgres_fqdn
+ssh azureuser@<bastion-public-ip>
+psql "host=<fqdn> port=5432 dbname=cms user=cmsadmin sslmode=require"
+```
+
+`custom_data` is ForceNew: adding a tool changes the cloud-init payload and
+replaces the VM. It holds no data, so `-/+` on `vm-bastion-*` in the plan is
+expected.
+
+### Restoring an existing dump
+
+The CMS archive is **custom format** (`pg_dump -Fc`). If it was produced by a
+newer `pg_dump` than the VM's client, `pg_restore` refuses it outright:
+
+```text
+pg_restore: error: unsupported version (1.16) in file header   # pg_dump 18 vs client 16
+```
+
+Install the matching client from PGDG (one-off, on the VM — `custom_data` is
+ForceNew, so this is not in cloud-init):
+
+```bash
+sudo install -d /usr/share/postgresql-common/pgdg
+sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+  https://www.postgresql.org/media/keys/ACCC4CF8.asc
+echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+  | sudo tee /etc/apt/sources.list.d/pgdg.list
+sudo apt-get update && sudo apt-get install -y postgresql-client-18
+pg_restore --version   # 18.x — pg_wrapper picks the newest installed client
+```
+
+Then copy the archive and restore:
+
+```bash
+# laptop
+scp cms.dump azureuser@<bastion-public-ip>:
+# bastion
+read -rs URL && export URL   # paste `terraform output -raw database_url`
+pg_restore --no-owner --no-privileges -d "$URL" ~/cms.dump
+```
+
+- `--no-owner` is mandatory: the archive's objects belong to the source role
+  (`admin`), which does not exist on the new server.
+- `--no-privileges` skips `GRANT`s to roles that do not exist either.
+- One error is expected and harmless:
+  `SET transaction_timeout = 0` (`pg_dump 18` emits it, a 16 server rejects it).
+  Nothing else should fail; `pg_restore` exits 1 on that alone.
+- Verified end to end: 335 tables, `articles` 58 rows, `admin_users` 5 rows.
+
+Take a backup before a re-restore: `pg_dump "$URL" -Fc -f ~/cms-$(date +%F).dump`.
 
 ## Usage
 

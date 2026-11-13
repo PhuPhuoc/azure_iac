@@ -6,9 +6,11 @@ locals {
 resource "random_password" "postgres" {
   count = var.admin_password == null ? 1 : 0
 
-  length           = 24
-  special          = true
-  override_special = "-_"
+  length  = 16
+  upper   = true
+  lower   = true
+  numeric = true
+  special = false
 }
 
 resource "azurerm_postgresql_flexible_server" "main" {
@@ -22,7 +24,9 @@ resource "azurerm_postgresql_flexible_server" "main" {
   backup_retention_days         = var.backup_retention_days
   administrator_login           = var.admin_login
   administrator_password        = local.admin_password
-  public_network_access_enabled = true
+  public_network_access_enabled = var.public_network_access_enabled
+  delegated_subnet_id           = var.delegated_subnet_id
+  private_dns_zone_id           = var.private_dns_zone_id
 
   tags = var.tags
 
@@ -30,6 +34,11 @@ resource "azurerm_postgresql_flexible_server" "main" {
     # Azure assigns a primary zone at creation. Changing it later requires a
     # high-availability exchange, so keep the provider from nulling it out.
     ignore_changes = [zone]
+
+    precondition {
+      condition     = var.delegated_subnet_id == null || (var.private_dns_zone_id != null && var.public_network_access_enabled == false)
+      error_message = "delegated_subnet_id requires private_dns_zone_id and public_network_access_enabled = false."
+    }
   }
 }
 
@@ -43,7 +52,7 @@ resource "azurerm_postgresql_flexible_server_database" "cms" {
 # One rule per developer workstation IP so migrations can run locally.
 # Azure PostgreSQL firewall rules are IPv4 only.
 resource "azurerm_postgresql_flexible_server_firewall_rule" "clients" {
-  for_each = toset(var.allowed_client_ips)
+  for_each = toset(var.public_network_access_enabled ? var.allowed_client_ips : [])
 
   name             = "allow-${replace(each.value, ".", "-")}"
   server_id        = azurerm_postgresql_flexible_server.main.id
@@ -52,10 +61,11 @@ resource "azurerm_postgresql_flexible_server_firewall_rule" "clients" {
 }
 
 # Azure treats 0.0.0.0/0.0.0.0 as "allow public access from any Azure service".
-# It is the documented option for Container Apps egress when the environment
-# has no static outbound IP (VNet + NAT gateway).
+# Only useful while the server still has a public endpoint; VNet integration
+# makes it redundant because the Container Apps subnet reaches the server
+# over the delegated subnet.
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
-  count = var.allow_azure_services ? 1 : 0
+  count = var.public_network_access_enabled && var.allow_azure_services ? 1 : 0
 
   name             = "allow-azure-services"
   server_id        = azurerm_postgresql_flexible_server.main.id
