@@ -2,37 +2,38 @@ data "azurerm_resource_group" "main" {
   name = var.resource_group_name
 }
 
-resource "random_string" "suffix" {
-  length  = 6
-  lower   = true
-  upper   = false
-  numeric = true
-  special = false
-}
-
 locals {
-  suffix    = random_string.suffix.result
-  tags      = { project = "phungela-cms", managed_by = "tf" }
+  suffix    = "dev01"
+  tags      = { project = "phungela", managed_by = "tf", env = "dev" }
   acr_repos = { cms = "cms", landing = "landing" }
 }
 
+# dev is deliberately flat: no VNet, no NAT, every service keeps a public
+# endpoint. PostgreSQL is guarded by firewall rules instead of a private
+# subnet, and Container Apps has no static egress address.
 module "postgres" {
   source = "../../modules/postgres"
 
-  name_prefix           = var.name_prefix
-  suffix                = local.suffix
-  resource_group_name   = data.azurerm_resource_group.main.name
-  location              = var.location
+  name_prefix         = var.name_prefix
+  suffix              = local.suffix
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = var.location
+
   postgres_version      = var.postgres_version
   sku_name              = var.postgres_sku_name
   storage_mb            = var.postgres_storage_mb
   backup_retention_days = var.postgres_backup_retention_days
-  admin_login           = var.postgres_admin_login
-  admin_password        = var.postgres_admin_password
-  database_name         = var.postgres_database_name
-  allowed_client_ips    = var.allowed_client_ips
-  allow_azure_services  = var.postgres_allow_azure_services
-  tags                  = local.tags
+
+  admin_login    = var.postgres_admin_login
+  admin_password = var.postgres_admin_password
+  database_name  = var.postgres_database_name
+
+  # No static egress IP here, so the Azure services rule is the only way the
+  # Container Apps can reach the server.
+  allowed_client_ips   = var.allowed_client_ips
+  allow_azure_services = var.postgres_allow_azure_services
+
+  tags = local.tags
 }
 
 module "acr" {
@@ -50,6 +51,18 @@ module "acr" {
 
 module "aca" {
   source = "../../modules/aca"
+
+  name_prefix         = var.name_prefix
+  suffix              = local.suffix
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = var.location
+  tags                = local.tags
+}
+
+# Media storage. Its SAS/URL feed the CMS upload plugin; outputs also stay
+# exposed for local Strapi testing against the same account.
+module "blob" {
+  source = "../../modules/blob"
 
   name_prefix         = var.name_prefix
   suffix              = local.suffix
@@ -109,16 +122,4 @@ module "landing" {
   landing_image_tag        = var.landing_image_tag
 
   preview_secret = module.cms.preview_secret
-}
-
-# Media storage. Its SAS/URL feed the CMS upload plugin; outputs also stay
-# exposed for local Strapi testing against the same account.
-module "blob" {
-  source = "../../modules/blob"
-
-  name_prefix         = var.name_prefix
-  suffix              = local.suffix
-  resource_group_name = data.azurerm_resource_group.main.name
-  location            = var.location
-  tags                = local.tags
 }

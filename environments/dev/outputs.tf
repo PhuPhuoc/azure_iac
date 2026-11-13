@@ -13,7 +13,7 @@ output "postgres_admin_login" {
   value       = module.postgres.admin_login
 }
 
-output "postgres_admin_password" {
+output "db_password" {
   description = "Effective PostgreSQL administrator password."
   value       = module.postgres.admin_password
   sensitive   = true
