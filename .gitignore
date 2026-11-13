@@ -24,3 +24,8 @@ override.tf.json
 # Terraform CLI config (can contain credentials / plugin cache settings)
 .terraformrc
 terraform.rc
+
+# Database dumps (live CMS data, personal records; never commit)
+*.dump
+*.sql
+*.sql.gz
