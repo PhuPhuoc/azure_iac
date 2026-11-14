@@ -113,14 +113,6 @@ resource "azurerm_linux_virtual_machine" "bastion" {
           [Install]
           WantedBy=multi-user.target
 
-      # lazysql is off for now: only pgweb is exposed, keep the VM lean.
-      # Re-enable together with the lazysql install block in runcmd.
-      # - path: /etc/profile.d/lazysql.sh
-      #   permissions: "0644"
-      #   content: |
-      #     # Release builds disclose telemetry on first run; keep the bastion quiet.
-      #     alias lazysql='lazysql -no-telemetry'
-
     runcmd:
       - |
         set -eux
@@ -139,13 +131,6 @@ resource "azurerm_linux_virtual_machine" "bastion" {
           https://github.com/sosedoff/pgweb/releases/download/v0.17.0/pgweb_linux_amd64.zip
         unzip -oq /tmp/pgweb.zip -d /tmp
         install -m 0755 /tmp/pgweb_linux_amd64 /usr/local/bin/pgweb
-
-        # lazysql 0.7.0 (commented out): k9s/lazygit-style TUI, used straight in
-        # the SSH session. lib/pq speaks sslmode=require, so database_url works.
-        # curl -fsSL -o /tmp/lazysql.tar.gz \
-        #   https://github.com/jorgerojas26/lazysql/releases/download/v0.7.0/lazysql_Linux_x86_64.tar.gz
-        # tar -xzf /tmp/lazysql.tar.gz -C /tmp lazysql
-        # install -m 0755 /tmp/lazysql /usr/local/bin/lazysql
 
         id -u pgweb >/dev/null 2>&1 || \
           useradd --system --create-home --home-dir /var/lib/pgweb --shell /usr/sbin/nologin pgweb
