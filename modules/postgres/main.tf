@@ -31,6 +31,8 @@ resource "azurerm_postgresql_flexible_server" "main" {
   tags = var.tags
 
   lifecycle {
+    prevent_destroy = true
+
     # Azure assigns a primary zone at creation. Changing it later requires a
     # high-availability exchange, so keep the provider from nulling it out.
     ignore_changes = [zone]
@@ -47,6 +49,10 @@ resource "azurerm_postgresql_flexible_server_database" "cms" {
   server_id = azurerm_postgresql_flexible_server.main.id
   charset   = "UTF8"
   collation = "en_US.utf8"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # One rule per developer workstation IP so migrations can run locally.

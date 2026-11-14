@@ -5,7 +5,7 @@ name_prefix         = "cms"
 postgres_version               = "16"
 postgres_sku_name              = "GP_Standard_D2ds_v5"
 postgres_storage_mb            = 32768
-postgres_backup_retention_days = 7
+postgres_backup_retention_days = 35
 postgres_admin_login           = "cmsadmin"
 postgres_database_name         = "cms"
 # Set this to the existing password when migrating an existing server, or use

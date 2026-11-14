@@ -56,7 +56,7 @@ variable "postgres_storage_mb" {
 variable "postgres_backup_retention_days" {
   description = "PostgreSQL backup retention in days."
   type        = number
-  default     = 7
+  default     = 35
 }
 
 variable "postgres_admin_login" {
