@@ -45,12 +45,6 @@ output "blob_cdn_url" {
   value       = module.blob.container_url
 }
 
-output "blob_sas_url" {
-  description = "AZURE_STORAGE_SAS_URL for local upload testing."
-  value       = module.blob.sas_url
-  sensitive   = true
-}
-
 output "acr_login_server" {
   description = "Registry host for image references."
   value       = module.acr.login_server

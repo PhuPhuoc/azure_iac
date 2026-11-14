@@ -1,6 +1,4 @@
 locals {
-  # Storage account names are globally unique, 3-24 chars, lowercase
-  # alphanumeric. 2 + 11 (max name_prefix) + 5 + 6 (suffix) = 24.
   account_name = "st${var.name_prefix}media${var.suffix}"
 }
 
@@ -14,16 +12,29 @@ resource "azurerm_storage_account" "main" {
   account_replication_type = var.replication_type
   min_tls_version          = "TLS1_2"
 
-  # Strapi stores the public blob URL on each asset and the frontend reads it
-  # without a token, so anonymous read must stay allowed. Writes still require
-  # the SAS below.
   allow_nested_items_to_be_public = true
 
   # Needed for the account-level SAS handed to the CMS.
   shared_access_key_enabled     = true
   public_network_access_enabled = true
 
+  blob_properties {
+    versioning_enabled = true
+
+    delete_retention_policy {
+      days = 30
+    }
+
+    container_delete_retention_policy {
+      days = 30
+    }
+  }
+
   tags = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "azurerm_storage_container" "uploads" {
@@ -32,15 +43,23 @@ resource "azurerm_storage_container" "uploads" {
 
   # Public read, private write. Matches allow_nested_items_to_be_public above.
   container_access_type = "blob"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 data "azurerm_storage_account_sas" "uploads" {
-  connection_string = azurerm_storage_account.main.primary_connection_string
+  # Signed with the SECONDARY key on purpose: renewing the primary key revokes
+  # every SAS already issued with it, and the CMS keeps working because this
+  # token is signed with the other key. Order matters:
+  #   1. apply -> the CMS secret holds a secondary-signed SAS
+  #   2. az storage account keys renew --key primary   (old 5-year SAS dies)
+  # Next rotation cycle: sign with primary and renew the secondary key.
+  connection_string = azurerm_storage_account.main.secondary_connection_string
   https_only        = true
   signed_version    = "2022-11-02"
 
-  # Fixed timestamps on purpose: a relative window (timeadd(timestamp(), ...))
-  # re-signs and invalidates the URL on every apply.
   start  = var.sas_start
   expiry = var.sas_expiry
 
@@ -51,18 +70,27 @@ data "azurerm_storage_account_sas" "uploads" {
     file  = false
   }
 
+  # Object only: the CMS never touches container-level operations, and `delete`
+  # at container scope would let a leaked SAS drop the whole container.
   resource_types {
     service   = false
-    container = true
+    container = false
     object    = true
   }
 
+  # Exactly what strapi/src/providers/upload-azure/index.ts calls:
+  #   read   - serve/inspect assets
+  #   write  - uploadData() -> Put Blob / Put Block List
+  #   delete - deleteIfExists() -> Delete Blob; without it removed assets keep
+  #            serving from a public-read container.
+  # No list (no listBlobs/listContainers), no add (no append blobs), no create
+  # (Put Blob accepts `w`, already granted).
   permissions {
     read   = true
-    add    = true
-    create = true
+    add    = false
+    create = false
     write  = true
     delete = true
-    list   = true
+    list   = false
   }
 }

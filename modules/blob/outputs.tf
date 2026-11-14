@@ -24,7 +24,7 @@ output "container_url" {
 }
 
 output "sas_url" {
-  description = "Container URL with account SAS (read/add/create/write/delete/list). Maps to AZURE_STORAGE_SAS_URL."
+  description = "Container URL with account SAS (read/write/delete on objects). Maps to AZURE_STORAGE_SAS_URL."
   value       = "${azurerm_storage_account.main.primary_blob_endpoint}${azurerm_storage_container.uploads.name}?${data.azurerm_storage_account_sas.uploads.sas}"
   sensitive   = true
 }

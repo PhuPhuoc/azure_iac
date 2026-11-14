@@ -47,9 +47,9 @@ variable "sas_start" {
 }
 
 variable "sas_expiry" {
-  description = "SAS validity end (RFC 3339). Rotate by changing this value and re-applying."
+  description = "SAS validity end (RFC 3339). One year out: rotate by bumping this, then re-apply."
   type        = string
-  default     = "2031-01-01T00:00:00Z"
+  default     = "2027-11-14T00:00:00Z"
 }
 
 variable "tags" {
