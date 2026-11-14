@@ -77,7 +77,7 @@ output "headless_cms_name" {
 }
 
 output "headless_cms_url" {
-  description = "Public CMS URL. Unreachable while cms_paused is true."
+  description = "Public CMS URL."
   value       = module.cms.url
 }
 

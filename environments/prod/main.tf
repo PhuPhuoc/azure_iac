@@ -94,36 +94,44 @@ module "blob" {
   tags                = local.tags
 }
 
-# module "cms" {
-#   source = "../../modules/cms"
-#
-#   name_prefix         = var.name_prefix
-#   suffix              = local.suffix
-#   resource_group_name = data.azurerm_resource_group.main.name
-#   tags                = local.tags
-#
-#   container_app_environment_id   = module.aca.environment_id
-#   app_environment_default_domain = module.aca.default_domain
-#
-#   acr_login_server     = module.acr.login_server
-#   acr_admin_username   = module.acr.admin_username
-#   acr_admin_password   = module.acr.admin_password
-#   cms_image_repository = local.acr_repos.cms
-#   cms_image_tag        = var.cms_image_tag
-#   cms_paused           = var.cms_paused
-#
-#   database_host     = module.postgres.fqdn
-#   database_name     = module.postgres.database_name
-#   database_username = module.postgres.admin_login
-#   database_password = module.postgres.admin_password
-#
-#   client_url               = var.cms_client_url
-#   strapi_stripe_secret_key = var.strapi_stripe_secret_key
-#
-#   blob_sas_url        = module.blob.sas_url
-#   blob_container_name = module.blob.container_name
-#   blob_cdn_url        = module.blob.container_url
-# }
+module "cms" {
+  source = "../../modules/cms"
+
+  name_prefix         = var.name_prefix
+  suffix              = local.suffix
+  resource_group_name = data.azurerm_resource_group.main.name
+  tags                = local.tags
+
+  container_app_environment_id   = module.aca.environment_id
+  app_environment_default_domain = module.aca.default_domain
+
+  acr_login_server     = module.acr.login_server
+  acr_admin_username   = module.acr.admin_username
+  acr_admin_password   = module.acr.admin_password
+  cms_image_repository = local.acr_repos.cms
+  cms_image_tag        = var.cms_image_tag
+
+  database_host     = module.postgres.fqdn
+  database_name     = module.postgres.database_name
+  database_username = module.postgres.admin_login
+  database_password = module.postgres.admin_password
+
+  client_url               = var.cms_client_url
+  strapi_stripe_secret_key = var.strapi_stripe_secret_key
+
+  smtp_host             = var.cms_smtp_host
+  smtp_port             = var.cms_smtp_port
+  smtp_username         = var.cms_smtp_username
+  smtp_password         = var.cms_smtp_password
+  smtp_secure           = var.cms_smtp_secure
+  smtp_default_from     = var.cms_smtp_default_from
+  smtp_default_reply_to = var.cms_smtp_default_reply_to
+  contact_inbox         = var.cms_contact_inbox
+
+  blob_sas_url        = module.blob.sas_url
+  blob_container_name = module.blob.container_name
+  blob_cdn_url        = module.blob.container_url
+}
 
 # module "landing" {
 #   source = "../../modules/landing"

@@ -87,7 +87,6 @@ module "cms" {
   acr_admin_password   = module.acr.admin_password
   cms_image_repository = local.acr_repos.cms
   cms_image_tag        = var.cms_image_tag
-  cms_paused           = var.cms_paused
 
   database_host     = module.postgres.fqdn
   database_name     = module.postgres.database_name
@@ -96,6 +95,15 @@ module "cms" {
 
   client_url               = var.cms_client_url
   strapi_stripe_secret_key = var.strapi_stripe_secret_key
+
+  smtp_host             = var.cms_smtp_host
+  smtp_port             = var.cms_smtp_port
+  smtp_username         = var.cms_smtp_username
+  smtp_password         = var.cms_smtp_password
+  smtp_secure           = var.cms_smtp_secure
+  smtp_default_from     = var.cms_smtp_default_from
+  smtp_default_reply_to = var.cms_smtp_default_reply_to
+  contact_inbox         = var.cms_contact_inbox
 
   blob_sas_url        = module.blob.sas_url
   blob_container_name = module.blob.container_name

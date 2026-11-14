@@ -48,10 +48,10 @@ variable "app_environment_default_domain" {
   type        = string
 }
 
-variable "cms_paused" {
-  description = "Scale the app to zero and disable ingress. The database and registry stay untouched."
+variable "revision_health_gate" {
+  description = "After apply, poll the new revision and fail the apply unless it reports Healthy. Requires the az CLI logged into the target subscription on the machine running Terraform."
   type        = bool
-  default     = false
+  default     = true
 }
 
 # Registry access
@@ -131,5 +131,56 @@ variable "strapi_stripe_secret_key" {
   description = "Stripe secret key read by the order controller at boot. Omitted when null."
   type        = string
   sensitive   = true
+  default     = null
+}
+
+# Email (Strapi email plugin + form notifications)
+
+variable "smtp_host" {
+  description = "SMTP host. Null or empty omits every SMTP/CONTACT_INBOX env var, leaving the app's built-in defaults."
+  type        = string
+  default     = null
+}
+
+variable "smtp_port" {
+  description = "SMTP port. 587 pairs with smtp_secure = false (STARTTLS), 465 with true."
+  type        = number
+  default     = 587
+}
+
+variable "smtp_username" {
+  description = "SMTP auth username. Required when smtp_host is set."
+  type        = string
+  default     = null
+}
+
+variable "smtp_password" {
+  description = "SMTP auth password, delivered to the app as a Container App secret. Required when smtp_host is set."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "smtp_secure" {
+  description = "Implicit TLS for the SMTP connection (SMTP_SECURE). False for STARTTLS on 587, true for 465."
+  type        = bool
+  default     = false
+}
+
+variable "smtp_default_from" {
+  description = "From address on outgoing mail (SMTP_DEFAULT_FROM). Required when smtp_host is set."
+  type        = string
+  default     = null
+}
+
+variable "smtp_default_reply_to" {
+  description = "Reply-To address on outgoing mail (SMTP_DEFAULT_REPLY_TO). Required when smtp_host is set."
+  type        = string
+  default     = null
+}
+
+variable "contact_inbox" {
+  description = "Recipient of form-submission notifications (CONTACT_INBOX). Required when smtp_host is set; the app falls back to ADMIN_EMAIL only when this is unset."
+  type        = string
   default     = null
 }

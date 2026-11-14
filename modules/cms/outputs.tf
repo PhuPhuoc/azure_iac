@@ -9,7 +9,7 @@ output "name" {
 }
 
 output "url" {
-  description = "Stable public CMS URL. Unreachable while cms_paused is true."
+  description = "Stable public CMS URL."
   value       = local.cms_url
 }
 

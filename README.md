@@ -75,6 +75,18 @@ endpoint public.
 - `cms` — Strapi, 1 CPU / 2Gi, max 1 replica. Tự sinh toàn bộ secret boot
   (APP_KEYS, JWT, salt, encryption key, PREVIEW_SECRET). Env
   `AZURE_STORAGE_*` lấy từ `blob`, DB lấy từ `postgres`, image lấy từ `acr`.
+  Email lấy từ nhóm `cms_smtp_*` (host, port, username, password, secure,
+  from, reply-to) và `cms_contact_inbox`; password đi qua Container App secret.
+  Bỏ trống `cms_smtp_host` thì không set env email nào.
+  DB đang nối bằng `cmsadmin` (chạy tạm). Muốn tách quyền: tạo role `cms_app`
+  bằng `environments/prod/bootstrap/cms-db-user.sql` chạy trên bastion rồi đổi
+  `database_username`/`database_password` trong `environments/prod/main.tf` —
+  Terraform không tạo được role PostgreSQL (không có resource, và server
+  private). `revision_mode = Multiple` để revision cũ còn đường lùi, và sau mỗi
+  revision mới có health gate GET `/_health` trên FQDN của chính revision đó
+  (FQDN app vẫn trả lời từ revision cũ khi đang rollout nên không dùng được):
+  revision `Failed`/`Stopped` thì báo ngay, sau ~5 phút mà không có 200/204 thì
+  apply fail.
 - `landing` — Next.js, 0.5 CPU / 1Gi, port 3000. Không khai báo HTTP probe vì
   `/api/preview` trả 401 và các route còn lại đều render data từ CMS, probe 2xx
   sẽ restart app mỗi khi CMS chết.
@@ -120,10 +132,32 @@ terraform apply tfplan
 Đọc plan trước khi apply, nhất là khi thấy destroy/replace ngoài dự kiến —
 `custom_data` của bastion là ForceNew nên thêm tool là VM bị tạo lại.
 
+Prod, tuỳ chọn — tách role DB cho CMS (hiện CMS vẫn nối bằng `cmsadmin`):
+
+```bash
+openssl rand -base64 24            # mật khẩu cho role cms_app
+scp environments/prod/bootstrap/cms-db-user.sql bastion:
+ssh ubuntu@<bastion-ip> -- psql \
+  "host=pg-phungela-prod01.postgres.database.azure.com port=5432 dbname=cms user=cmsadmin sslmode=require" \
+  -v app_password='<mật khẩu trên>' -f cms-db-user.sql
+```
+
+Rồi đặt `database_username = "cms_app"` và `database_password` (thêm biến
+sensitive hoặc `random_password`) trong `environments/prod/main.tf`. Script chạy
+lại được nhiều lần: tạo role nếu thiếu, reset password, grant lại schema (kể cả
+bảng đã restore từ dump bằng user admin).
+
 ## Vài thứ dễ quên
 
 - `*.tfvars`, `.terraform/`, `*.tfstate` đều git-ignore; chỉ commit file
-  `.example`.
+  `.example`. `*.sql` cũng ignore, trừ `environments/*/bootstrap/*.sql`.
+- Health gate cần `az` (đã login cùng subscription) và `curl` trên máy chạy
+  apply; muốn bỏ qua thì đặt `revision_health_gate = false` trong module `cms`.
+- Gate chỉ xét revision mới nhất, không xét `healthState` của app: trạng thái đó
+  trả `unknown` trong lúc startup probe còn chạy.
+- Nếu gate báo revision không Healthy: xem `az containerapp logs show -n
+  ca-phungela-prod01 -g rg-cms-prod --tail 50`. Nguyên nhân thường gặp là DB
+  hoặc SMTP sai credential, image tag không tồn tại.
 - prod: đừng để `postgres_admin_password` null nếu server đã tồn tại, nó sẽ
   rotate password thật.
 - dev: `postgres_allow_azure_services = true` phải bật trước khi tạo

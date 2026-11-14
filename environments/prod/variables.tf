@@ -161,12 +161,6 @@ variable "landing_image_tag" {
   default     = "latest"
 }
 
-variable "cms_paused" {
-  description = "Scale the CMS to zero and disable its ingress. Registry and database stay untouched."
-  type        = bool
-  default     = false
-}
-
 variable "cms_client_url" {
   description = "Public frontend URL used for admin preview origins and password-reset links. Null omits CLIENT_URL."
   type        = string
@@ -182,5 +176,62 @@ variable "strapi_stripe_secret_key" {
   description = "Stripe secret key read by the order controller at boot. Prefer TF_VAR_strapi_stripe_secret_key; null omits the key."
   type        = string
   sensitive   = true
+  default     = null
+}
+
+# CMS email (Strapi email plugin + form notifications). Setting cms_smtp_host
+# enables the whole group; every other value below is then required.
+
+variable "cms_smtp_host" {
+  description = "SMTP host for the Strapi email plugin. Null leaves email unconfigured."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cms_smtp_host == null || var.cms_smtp_host != ""
+    error_message = "cms_smtp_host must be null or a hostname, not an empty string."
+  }
+}
+
+variable "cms_smtp_port" {
+  description = "SMTP port. 587 pairs with cms_smtp_secure = false (STARTTLS), 465 with true."
+  type        = number
+  default     = 587
+}
+
+variable "cms_smtp_username" {
+  description = "SMTP auth username. Required when cms_smtp_host is set."
+  type        = string
+  default     = null
+}
+
+variable "cms_smtp_password" {
+  description = "SMTP auth password. Required when cms_smtp_host is set. Prefer TF_VAR_cms_smtp_password."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "cms_smtp_secure" {
+  description = "Implicit TLS for SMTP. False for STARTTLS on 587, true for 465."
+  type        = bool
+  default     = false
+}
+
+variable "cms_smtp_default_from" {
+  description = "From address on outgoing mail. Required when cms_smtp_host is set."
+  type        = string
+  default     = null
+}
+
+variable "cms_smtp_default_reply_to" {
+  description = "Reply-To address on outgoing mail. Required when cms_smtp_host is set."
+  type        = string
+  default     = null
+}
+
+variable "cms_contact_inbox" {
+  description = "Recipient of form-submission notifications. Required when cms_smtp_host is set."
+  type        = string
   default     = null
 }
