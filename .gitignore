@@ -29,3 +29,6 @@ terraform.rc
 *.dump
 *.sql
 *.sql.gz
+
+# Reviewed bootstrap SQL is configuration, not data.
+!environments/*/bootstrap/*.sql
