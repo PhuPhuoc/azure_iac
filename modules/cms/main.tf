@@ -8,6 +8,33 @@ locals {
     var.cms_image_tag,
   )
 
+  # Plan-known fingerprint of every input that creates a new revision. The health
+  # gate below must not be triggered by latest_revision_name: that attribute is
+  # unknown during plan whenever the template changes, and apply then aborts with
+  # "Provider produced inconsistent final plan" because the value learned from
+  # ARM differs from the planned placeholder (hashicorp/terraform#33309). Using
+  # inputs instead keeps the gate firing on every deploy; the provisioner
+  # resolves the revision it has to check at apply time.
+  # Hashed (and nonsensitive) so secrets are not stored in the trigger in clear.
+  revision_trigger = nonsensitive(sha256(jsonencode({
+    image    = local.cms_image
+    database = join("|", [var.database_host, var.database_port, var.database_name, var.database_username, var.database_password])
+    storage  = join("|", [var.blob_container_name, var.blob_cdn_url, var.blob_sas_url == null ? "" : var.blob_sas_url])
+    secrets = join("|", [
+      local.app_keys,
+      random_password.strapi_preview_secret.result,
+      random_password.strapi_api_token_salt.result,
+      random_password.strapi_admin_jwt_secret.result,
+      random_password.strapi_transfer_token_salt.result,
+      random_password.strapi_jwt_secret.result,
+      random_password.strapi_encryption_key.result,
+      var.smtp_password == null ? "" : var.smtp_password,
+      var.strapi_stripe_secret_key == null ? "" : var.strapi_stripe_secret_key,
+    ])
+    client_url = var.client_url == null ? "" : var.client_url
+    smtp       = jsonencode(local.smtp_env)
+  })))
+
   # Stable public URL: the app FQDN is <name>.<environment default domain>.
   # Do not derive this from ingress.fqdn, which changes when ingress is paused.
   cms_url = "https://${local.cms_app_name}.${var.app_environment_default_domain}"
@@ -427,10 +454,13 @@ resource "azurerm_container_app" "headless_cms" {
 # revision.healthState is not used: it reports "unknown" while the startup probe
 # is still running, and runningState is "RunningAtMaxScale" once max_replicas is
 # reached, so neither is a reliable healthy signal on its own.
+#
+# The trigger is local.revision_trigger, not latest_revision_name: see the comment
+# on that local for why an unknown-at-plan trigger breaks apply.
 resource "terraform_data" "revision_health" {
   count = var.revision_health_gate ? 1 : 0
 
-  triggers_replace = azurerm_container_app.headless_cms.latest_revision_name
+  triggers_replace = local.revision_trigger
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -439,14 +469,19 @@ resource "terraform_data" "revision_health" {
       command -v curl >/dev/null || { echo "curl is required for the revision health gate" >&2; exit 1; }
       app='${azurerm_container_app.headless_cms.name}'
       rg='${var.resource_group_name}'
-      rev='${azurerm_container_app.headless_cms.latest_revision_name}'
-      url='https://${azurerm_container_app.headless_cms.latest_revision_fqdn}/_health'
+      rev=$(az containerapp show -n "$app" -g "$rg" --query properties.latestRevisionName -o tsv)
+      [ -n "$rev" ] || { echo "cannot resolve the latest revision of $app in $rg" >&2; exit 1; }
+      fqdn=$(az containerapp revision show -n "$app" -g "$rg" --revision "$rev" --query properties.fqdn -o tsv)
+      [ -n "$fqdn" ] || { echo "revision $rev of $app has no FQDN yet" >&2; exit 1; }
+      url="https://$fqdn/_health"
+      running=unknown
       for _ in $(seq 1 20); do
         running=$(az containerapp revision show -n "$app" -g "$rg" --revision "$rev" \
           --query properties.runningState -o tsv 2>/dev/null)
-        # Failed/Stopped are terminal (container exited, image pull rejected), so
-        # waiting out the remaining probes only delays the error.
-        case "$running" in Failed|Stopped) break ;; esac
+        # Only Stopped is terminal. Failed is not: a revision whose image pull was
+        # rejected flips to Failed and then recovers on its own once the tag is
+        # pushed, so treating it as final turns a late push into a false red apply.
+        case "$running" in Stopped) break ;; esac
         code=$(curl -s -o /dev/null -w '%%{http_code}' --max-time 5 "$url" 2>/dev/null || true)
         if [ "$code" = "200" ] || [ "$code" = "204" ]; then
           echo "revision $rev serves $url (HTTP $code, runningState $running)"
