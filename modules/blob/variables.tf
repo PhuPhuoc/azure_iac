@@ -40,6 +40,19 @@ variable "container_name" {
   }
 }
 
+variable "cors_allowed_origins" {
+  description = "Browser origins allowed to read blobs cross-origin (WebGL/canvas textures). Empty leaves CORS off. Must be scheme://host[:port], no trailing slash and no path — Azure matches the Origin header byte for byte."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for origin in var.cors_allowed_origins : can(regex("^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$", origin))
+    ])
+    error_message = "Each origin must look like https://ca-landing.example.io or http://localhost:3000 — no trailing slash, no path."
+  }
+}
+
 variable "sas_start" {
   description = "SAS validity start (RFC 3339). Keep it fixed: a relative value re-signs the URL on every apply."
   type        = string

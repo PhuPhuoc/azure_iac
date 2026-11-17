@@ -21,6 +21,25 @@ resource "azurerm_storage_account" "main" {
   blob_properties {
     versioning_enabled = true
 
+    # Browsers only read blobs cross-origin when the blob service answers with
+    # Access-Control-Allow-Origin. Plain <img> tags do not care, but the Next.js
+    # canvases pull textures with crossOrigin="anonymous" (Hero, Rolling
+    # Gallery, glyph logos), so without this rule WebGL draws "NO IMAGE" while
+    # the same URL opens fine in a tab. Allowed headers "*" keeps Strapi SDK
+    # requests working (x-ms-* on direct uploads); the SAS lives in the CMS, not
+    # in the browser, so this grants nothing beyond public-read bytes.
+    dynamic "cors_rule" {
+      for_each = length(var.cors_allowed_origins) > 0 ? [1] : []
+
+      content {
+        allowed_origins    = var.cors_allowed_origins
+        allowed_methods    = ["GET", "HEAD"]
+        allowed_headers    = ["*"]
+        exposed_headers    = ["*"]
+        max_age_in_seconds = 86400
+      }
+    }
+
     delete_retention_policy {
       days = 30
     }

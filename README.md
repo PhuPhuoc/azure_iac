@@ -60,6 +60,33 @@ Postgres resolves through the private DNS zone
 `cms-prod01.postgres.database.azure.com`. ACA egresses through NAT with a
 static public IP (`aca_egress_ip`). ACR and Blob remain public endpoints.
 
+## Media (Blob Storage) and CORS
+
+The landing page is the only browser origin that reads media from the storage
+account (`st<prefix>media<env>`): Strapi rewrites upload URLs to
+`AZURE_STORAGE_CDN_URL`, i.e. the public container endpoint, so `<img>` tags hit
+`*.blob.core.windows.net` directly.
+
+Plain `<img>` tags ignore CORS, so Metrics/Marquee work without it. The
+canvas/WebGL sections (Hero, Rolling Gallery, glyph logos) must set
+`crossOrigin="anonymous"` and therefore need the blob service to answer with
+`Access-Control-Allow-Origin`; otherwise the texture load fails and the canvas
+draws an empty frame / "NO IMAGE" while the same URL opens fine in a new tab.
+
+That rule is managed by `modules/blob` (`blob_properties.cors_rule`) and fed by
+`cors_allowed_origins`:
+
+| Env | Origin |
+| --- | --- |
+| both | `https://ca-<prefix>-landing-<env>.<aca-default-domain>` |
+| dev | `http://localhost:3000` (local `next dev` against the dev account) |
+| both | every entry in `blob_cors_extra_origins` in `terraform.tfvars` |
+
+Azure matches the `Origin` header byte for byte, so entries have no trailing
+slash and no path. **Add the public domain to `blob_cors_extra_origins` as soon
+as DNS points at the landing app**, otherwise the production domain renders the
+same "NO IMAGE" cards.
+
 ## Run
 
 ```bash

@@ -69,6 +69,16 @@ module "blob" {
   resource_group_name = data.azurerm_resource_group.main.name
   location            = var.location
   tags                = local.tags
+
+  # Browser origins that read blobs cross-origin: the deployed landing app and
+  # `next dev` on the workstation, which points at the same dev account.
+  cors_allowed_origins = concat(
+    [
+      "https://ca-${var.name_prefix}-landing-${local.suffix}.${module.aca.default_domain}",
+      "http://localhost:3000",
+    ],
+    var.blob_cors_extra_origins,
+  )
 }
 
 module "cms" {

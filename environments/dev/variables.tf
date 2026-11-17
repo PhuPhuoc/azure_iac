@@ -128,6 +128,19 @@ variable "landing_image_tag" {
   default     = "latest"
 }
 
+# Blob storage
+
+variable "blob_cors_extra_origins" {
+  description = "Additional browser origins allowed to read media from Blob Storage, on top of the landing app's own URL and http://localhost:3000."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for origin in var.blob_cors_extra_origins : can(regex("^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$", origin))])
+    error_message = "Each origin must look like https://www.example.com — no trailing slash, no path."
+  }
+}
+
 variable "cms_client_url" {
   description = "Public frontend URL used for admin preview origins and password-reset links. Null omits CLIENT_URL."
   type        = string

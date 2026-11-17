@@ -92,6 +92,16 @@ module "blob" {
   resource_group_name = data.azurerm_resource_group.main.name
   location            = var.location
   tags                = local.tags
+
+  # The landing app is the only browser origin that reads blobs (WebGL
+  # textures). Built from module.aca's default domain rather than
+  # module.landing.url on purpose: landing already depends on cms, which
+  # depends on blob, so feeding blob from landing would close a cycle. Extra
+  # entries (real domain, local Strapi runs) come from terraform.tfvars.
+  cors_allowed_origins = concat(
+    ["https://ca-${var.name_prefix}-landing-${local.suffix}.${module.aca.default_domain}"],
+    var.blob_cors_extra_origins,
+  )
 }
 
 module "cms" {
